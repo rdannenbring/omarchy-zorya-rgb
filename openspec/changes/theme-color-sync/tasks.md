@@ -6,4 +6,4 @@
 - [x] 1.5 Add panel toggle, palette swatches and disabled manual color controls.
 - [x] 1.6 Unit tests for theme parsing, effects, persistence policy and mode tracking.
 - [x] 1.7 Live check on a Keychron Q6 Max with OpenRGB 1.0: all four effects follow the theme.
-- [ ] 1.8 Verify a live theme switch updates and saves lighting.
+- [x] 1.8 Live theme switch (Harbor to Tokyo Night and back) updates lighting within seconds.
