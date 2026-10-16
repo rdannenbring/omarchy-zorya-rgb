@@ -64,6 +64,26 @@ class EffectAndStateTests(unittest.TestCase):
         self.assertEqual(frame(state, 2, 0), [(255, 0, 0), (0, 0, 255)])
 
 
+class BackendPersistTests(unittest.TestCase):
+    def setUp(self):
+        from test_backend_sdk import Client, Device
+        from zorya_rgb.openrgb_backend import OpenRGBBackend
+        self.device = Device(); self.device.modes[0].name = 'Solid Color'
+        self.backend = OpenRGBBackend(client_factory=lambda: Client([self.device]), color_factory=lambda *c: c)
+        self.backend.connect()
+        self.state = dict(DEFAULT_STATE, devices=[d['id'] for d in self.backend.devices([])])
+
+    def test_static_uses_saveable_solid_color_and_saves_only_on_request(self):
+        self.backend.apply(self.state, 0)
+        self.assertEqual((self.device.active_mode, self.device.saves), (0, 0))
+        self.backend.apply(dict(self.state, color='#00FF00'), 1, persist=True)
+        self.assertEqual(self.device.saves, 1)
+
+    def test_themed_rainbow_streams_palette_frames(self):
+        self.backend.apply(dict(self.state, effect='rainbow', palette=['#FF0000', '#0000FF']), 0)
+        self.assertEqual(self.device.writes[-1][0], (255, 0, 0))
+
+
 class DaemonThemeTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory(); root = Path(self.tmp.name)

@@ -9,9 +9,9 @@ class Device:
         self.name=name; self.location=location; self.serial=serial; self.colors=[None]*4; self.leds=[None]*4
         self.modes=[types.SimpleNamespace(name='Static',id=0,flags=32|16|256,color_mode=1,colors_min=1,colors_max=8,colors=[],speed_min=0,speed_max=0,speed=0,brightness_min=1,brightness_max=10,brightness=10),types.SimpleNamespace(name='Direct',id=1,flags=32,color_mode=1,colors_min=1,colors_max=8,colors=[],speed_min=0,speed_max=0,speed=0,brightness_min=0,brightness_max=0,brightness=0)]
         self.active_mode=0; self.fail=fail; self.writes=[]; self.mode_writes=[]; self.saves=0
-    def set_mode(self,mode):
+    def set_mode(self,mode,save=False):
         if self.fail: raise OSError('device unavailable')
-        self.active_mode=mode.id; self.mode_writes.append(copy.deepcopy(mode))
+        self.active_mode=mode.id; self.mode_writes.append(copy.deepcopy(mode)); self.saves+=bool(save)
     def set_colors(self,colors,fast=False):
         if self.fail: raise OSError('device unavailable')
         self.writes.append(colors)
@@ -56,7 +56,7 @@ class BackendTests(unittest.TestCase):
     def test_failed_device_has_backoff_while_healthy_device_animates(self):
         class Failing(Device):
             def __init__(self): super().__init__(); self.attempts=0
-            def set_mode(self,mode): self.attempts+=1; raise OSError('failed')
+            def set_mode(self,mode,save=False): self.attempts+=1; raise OSError('failed')
         bad=Failing(); good=Device(location='PCI:2'); b=self.backend([bad,good])
         state=dict(DEFAULT_STATE,devices=[d['id'] for d in b.devices([])],effect='rainbow')
         for t in (0,.5,1): b.apply(state,t)

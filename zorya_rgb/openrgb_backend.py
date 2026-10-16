@@ -165,7 +165,7 @@ class OpenRGBBackend:
             if int(mode.flags)&PER_LED: return mode,False
         raise ValueError('No supported per-LED color mode')
 
-    def _prepare(self,device,state):
+    def _prepare(self,device,state,persist=False):
         original,native=self._pick_mode(device,state)
         mode=normalize_mode(original)
         validate_mode_colors(mode)
@@ -179,7 +179,9 @@ class OpenRGBBackend:
             count=max(1,mode.colors_min or 1)
             color=self._native_color(state,int(mode.flags)) if native else frame(state,1,0)[0]
             mode.colors=[self._color(*color) for _ in range(count)]
-        device.set_mode(mode)
+        # Save the packed new mode itself; save_mode() would resend the cached old one.
+        # Onboard storage keeps the color across replugs and wireless use.
+        device.set_mode(mode,save=bool(persist and int(mode.flags)&MANUAL_SAVE))
         # SDK set_mode refreshes the device. Normalize refreshed modes too.
         device.modes=[normalize_mode(m) for m in device.modes]
         if state['on'] and state['effect']=='pulse' and self.onboard_pulse is not None:
@@ -228,11 +230,8 @@ class OpenRGBBackend:
                 previous=self._prepared.get(identity)
                 changed=force or previous is None or previous[0]!=signature
                 if changed:
-                    native,flags,palette=self._prepare(device,state)
+                    native,flags,palette=self._prepare(device,state,persist)
                     self._prepared[identity]=(signature,native,flags,palette)
-                    if persist and flags&MANUAL_SAVE:
-                        # Onboard storage keeps the color across replugs and wireless use.
-                        device.save_mode()
                 else:
                     _,native,flags,palette=previous
                 static=not state['on'] or state['effect']=='static'
