@@ -140,10 +140,40 @@ class OpenRGBBackend:
         selected=set(selected)
         return [{'id':identity,'name':str(device.name),'selected':identity in selected,
                  'modes':[str(mode.name) for mode in device.modes],
+                 'hardware_modes':[str(mode.name) for mode in device.modes if self._hardware_mode(mode)],
                  'led_count':len(getattr(device,'leds',getattr(device,'colors',[]))),
                  'location':_metadata(device,'location'), 'error':self.device_errors.get(identity),
                  'identity_warning':self.identity_warnings.get(identity)}
                 for identity,device in self.controllers.items()]
+
+    @staticmethod
+    def _hardware_mode(mode):
+        # Direct-style modes only take host frames; every other mode runs onboard.
+        return str(mode.name).lower() not in ('direct','custom') and (int(mode.flags)&~PER_LED)!=0
+
+    def _prepare_hardware(self,device,state,name,persist):
+        original=next((m for m in device.modes if str(m.name)==name),None)
+        if original is None: raise ValueError('Hardware mode unavailable: '+name)
+        mode=normalize_mode(original)
+        flags=int(mode.flags)
+        if flags&HAS_BRIGHTNESS:
+            low=mode.brightness_min; high=mode.brightness_max
+            mode.brightness=round(low+(high-low)*state['brightness']/100)
+        if flags&HAS_SPEED:
+            low=mode.speed_min; high=mode.speed_max
+            mode.speed=round(low+(high-low)*(state['speed']-.1)/4.9)
+        if flags&MODE_COLORS:
+            # Fill mode color slots from the scene: primary, secondary, then theme palette.
+            choices=list(dict.fromkeys([state['color'],state['secondary_color'],*state.get('palette',[])]))
+            low=max(1,mode.colors_min or 1); high=max(low,mode.colors_max or low)
+            count=min(high,max(low,len(choices) if high>1 else 1))
+            mode.colors=[self._color(*rgb(choices[i%len(choices)])) for i in range(count)]
+        validate_mode_colors(mode)
+        device.set_mode(mode,save=bool(persist and flags&MANUAL_SAVE))
+        device.active_mode=mode.id
+        device.modes=[normalize_mode(m) for m in device.modes]
+        # Onboard modes animate themselves, so the backend streams no LED frames.
+        return True,flags,True
 
     def _pick_mode(self,device,state):
         modes=list(device.modes)
@@ -165,7 +195,9 @@ class OpenRGBBackend:
             if int(mode.flags)&PER_LED: return mode,False
         raise ValueError('No supported per-LED color mode')
 
-    def _prepare(self,device,state,persist=False):
+    def _prepare(self,device,state,persist=False,identity=None):
+        hardware=state.get('hardware_modes',{}).get(identity) if state['on'] else None
+        if hardware: return self._prepare_hardware(device,state,hardware,persist)
         original,native=self._pick_mode(device,state)
         mode=normalize_mode(original)
         validate_mode_colors(mode)
@@ -231,10 +263,11 @@ class OpenRGBBackend:
                 continue
             try:
                 previous=self._prepared.get(identity)
-                changed=force or previous is None or previous[0]!=signature
+                device_signature=signature+(('hardware_mode',state.get('hardware_modes',{}).get(identity)),)
+                changed=force or previous is None or previous[0]!=device_signature
                 if changed:
-                    native,flags,palette=self._prepare(device,state,persist)
-                    self._prepared[identity]=(signature,native,flags,palette)
+                    native,flags,palette=self._prepare(device,state,persist,identity)
+                    self._prepared[identity]=(device_signature,native,flags,palette)
                 else:
                     _,native,flags,palette=previous
                 static=not state['on'] or state['effect']=='static'

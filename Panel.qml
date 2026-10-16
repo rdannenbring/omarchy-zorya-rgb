@@ -28,6 +28,13 @@ Ui.Panel {
     property string inputError: ""
     property Service backend: Service { active: root.opened }
     readonly property bool themeSync: root.backend.state.theme_sync === true
+    readonly property var hardwareModes: root.backend.state.hardware_modes || ({})
+    function setHardwareMode(identity, name) {
+        var modes = Object.assign({}, root.hardwareModes)
+        if (name) modes[identity] = name
+        else delete modes[identity]
+        root.backend.update({hardware_modes: modes})
+    }
     readonly property var themeColors: root.themeSync ? root.backend.state.theme || null : null
     readonly property string selectedColor: root.themeColors ? root.themeColors.primary : root.backend.state.color || "#FFFFFF"
     readonly property string secondaryColor: root.themeColors ? root.themeColors.secondary : root.backend.state.secondary_color || "#0088FF"
@@ -457,6 +464,7 @@ Ui.Panel {
                                 RoundedButton { text: "Refresh"; enabled: !root.backend.busy; onClicked: root.backend.refresh() }
                             }
                             Label { text: "Choose exactly which devices receive this scene. No devices are selected automatically."; Layout.fillWidth: true; wrapMode: Text.Wrap; font.pixelSize: 12; opacity: 0.65 }
+                            Label { text: "A device can run its own onboard mode instead of the Zorya effect. Onboard modes use your colors, speed and brightness where the mode supports them, and are saved to the device."; Layout.fillWidth: true; wrapMode: Text.Wrap; font.pixelSize: 11; opacity: 0.65 }
                             Repeater {
                                 model: root.backend.devices
                                 Rectangle {
@@ -480,6 +488,15 @@ Ui.Panel {
                                             Label {
                                                 text: deviceCard.modelData.led_count + " LEDs · " + deviceCard.modelData.location
                                                 Layout.fillWidth: true; elide: Text.ElideRight; font.pixelSize: 10; opacity: 0.6
+                                            }
+                                            RoundedComboBox {
+                                                readonly property var names: deviceCard.modelData.hardware_modes || []
+                                                visible: names.length > 0
+                                                Layout.fillWidth: true
+                                                model: ["Zorya effect"].concat(names)
+                                                currentIndex: Math.max(0, model.indexOf(root.hardwareModes[deviceCard.modelData.id] || ""))
+                                                Accessible.name: "Lighting mode for " + deviceCard.modelData.name
+                                                onActivated: root.setHardwareMode(deviceCard.modelData.id, currentIndex > 0 ? model[currentIndex] : "")
                                             }
                                         }
                                     }

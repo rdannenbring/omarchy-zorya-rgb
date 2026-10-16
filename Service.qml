@@ -8,7 +8,7 @@ import Quickshell.Io
 QtObject {
     id: service
     readonly property string executable: String(Qt.resolvedUrl("bin/zorya-rgb")).replace(/^file:\/\//, "")
-    property var state: ({on: true, color: "#FFFFFF", brightness: 100, effect: "static", speed: 1, secondary_color: "#8A6CFF", theme_sync: false, devices: [], presets: [], connected: false})
+    property var state: ({on: true, color: "#FFFFFF", brightness: 100, effect: "static", speed: 1, secondary_color: "#8A6CFF", theme_sync: false, hardware_modes: {}, devices: [], presets: [], connected: false})
     property var devices: []
     property var diagnostics: null
     property string error: ""

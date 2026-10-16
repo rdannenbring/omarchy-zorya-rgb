@@ -11,7 +11,7 @@ import threading
 import uuid
 
 DEFAULT_STATE = {'on': True, 'color': '#FFFFFF', 'brightness': 100, 'effect': 'static',
-                 'speed': 1.0, 'secondary_color': '#0088FF', 'theme_sync': False, 'devices': [], 'presets': []}
+                 'speed': 1.0, 'secondary_color': '#0088FF', 'theme_sync': False, 'hardware_modes': {}, 'devices': [], 'presets': []}
 SETTINGS = frozenset(DEFAULT_STATE) - {'presets'}
 
 
@@ -43,6 +43,13 @@ def validate_patch(state, patch):
         elif key == 'effect':
             if value not in ('static','pulse','rainbow','gradient'):
                 raise ValueError('effect must be static, pulse, rainbow or gradient')
+        elif key == 'hardware_modes':
+            # Per-device onboard mode names; absent devices follow the Zorya effect.
+            if not isinstance(value,dict) or len(value)>256: raise ValueError('hardware_modes must be an object of device modes')
+            for identity,name in value.items():
+                if not identity or len(identity)>256 or not isinstance(name,str) or not name.strip() or len(name)>64 or any(ord(c)<32 for c in name):
+                    raise ValueError('hardware_modes must map device IDs to mode names')
+            value = dict(value)
         elif key == 'devices':
             if not isinstance(value,list) or len(value)>256 or any(not isinstance(x,str) or not x or len(x)>256 for x in value):
                 raise ValueError('devices must be an array of device IDs')

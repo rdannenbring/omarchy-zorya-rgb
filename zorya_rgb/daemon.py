@@ -88,6 +88,9 @@ class ZoryaDaemon:
             if command=='set':
                 before=self.store.snapshot()['theme_sync']
                 self.store.update(message.get('patch'))
+                if isinstance(message.get('patch'),dict) and 'hardware_modes' in message['patch']:
+                    # Choosing an onboard mode is an explicit request to store it on the device.
+                    self.persist=True
                 if self.store.snapshot()['theme_sync'] and not before:
                     # Enabling sync is an explicit choice to store the theme color onboard.
                     self.theme=None; self._next_theme=0; self.persist=True
