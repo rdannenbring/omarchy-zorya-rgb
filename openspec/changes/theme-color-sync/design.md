@@ -10,7 +10,7 @@ Secondary is the palette color closest to 120° of hue from primary. A complemen
 Saved settings are not rewritten. The daemon overlays `color`, `secondary_color` and `palette` on the snapshot it passes to the backend. Turning sync off restores the user's saved colors.
 
 ## Onboard storage
-Writes to device flash happen only on explicit enablement or a real theme change, never on daemon start or restart. The mode is saved in the same SDK call that sets it, because `save_mode()` resends the cached previous mode.
+Writes to device flash happen only on explicit enablement or a real theme change, never on daemon start or restart. OpenRGB applies `UPDATEMODE` on a deferred device thread but runs `SAVEMODE` immediately, so saving with the update stored the previous state (a Keychron Q6 Max showed white). The backend sets the mode, then about one second later resends the identical mode with `save=True`. A newer change before then cancels the pending save. `save_mode()` is not used because it resends the SDK's cached mode.
 
 ## Mode switching
 After `set_mode`, the backend records the requested mode as active. An SDK refresh can report the previous mode, and `set_colors` then rejects LED frames against that mode's palette limits.
