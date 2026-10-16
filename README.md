@@ -85,6 +85,10 @@ When the theme changes, devices with onboard memory (for example Keychron QMK ke
 zorya-rgb set --json '{"theme_sync":true}'
 ```
 
+## Onboard device modes
+
+Each device in the **Devices** tab has a mode picker. Leave it on **Zorya effect** to follow the scene, or pick one of the device's own modes, such as typing-reactive or splash effects on a keyboard. Onboard modes run on the device itself, use your colors (or theme colors), speed and brightness where the mode supports them, and are saved to devices with onboard memory.
+
 ## Remove
 
 ```sh
