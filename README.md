@@ -75,6 +75,16 @@ zorya-rgb preset save "Evening"
 
 Native device modes are used when compatible. Supported Lian Li wireless controllers run pulse from a smooth onboard frame loop with the updated bridge. Software fallback may run at up to 30 FPS for USB/HID devices; SMBus/RF/unknown devices retain a conservative two-FPS limit. Some devices do not offer every mode; unsupported operations are shown as device errors instead of silently pretending to succeed.
 
+## Follow the Omarchy theme
+
+Turn on **Match Omarchy theme** in the color tab to light your devices with the active theme's colors. Zorya uses the theme's `keyboard.rgb`, or its accent when the theme has none. Effects keep working: static and pulse use the theme color, gradient blends it with a second theme color, and rainbow cycles the theme palette. Speed and brightness stay adjustable.
+
+When the theme changes, devices with onboard memory (for example Keychron QMK keyboards) also save the new color, so it stays after unplugging or switching to wireless. Turning the option off restores your own colors.
+
+```sh
+zorya-rgb set --json '{"theme_sync":true}'
+```
+
 ## Remove
 
 ```sh
