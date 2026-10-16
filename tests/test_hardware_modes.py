@@ -56,6 +56,8 @@ class HardwareModeTests(unittest.TestCase):
         state = dict(self.state, hardware_modes={self.identity: 'Two Tone'})
         self.backend.apply(state, 0, persist=True); self.assertEqual(self.device.saves, 0)
         self.backend.apply(dict(state, hardware_modes={self.identity: 'Breathing'}), 1, persist=True)
+        self.assertEqual(self.device.saves, 0)
+        self.backend.apply(dict(state, hardware_modes={self.identity: 'Breathing'}), 2.1)
         self.assertEqual(self.device.saves, 1)
 
     def test_lights_off_ignores_hardware_mode(self):

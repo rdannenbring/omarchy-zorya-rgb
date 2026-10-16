@@ -77,7 +77,18 @@ class BackendPersistTests(unittest.TestCase):
         self.backend.apply(self.state, 0)
         self.assertEqual((self.device.active_mode, self.device.saves), (0, 0))
         self.backend.apply(dict(self.state, color='#00FF00'), 1, persist=True)
+        self.assertEqual(self.device.saves, 0)
+        self.backend.apply(dict(self.state, color='#00FF00'), 1.5)
+        self.assertEqual(self.device.saves, 0)
+        self.backend.apply(dict(self.state, color='#00FF00'), 2.1)
         self.assertEqual(self.device.saves, 1)
+        self.assertEqual(self.device.mode_writes[-1].name, 'Solid Color')
+
+    def test_newer_change_cancels_a_pending_save(self):
+        self.backend.apply(dict(self.state, color='#00FF00'), 0, persist=True)
+        self.backend.apply(dict(self.state, color='#0000FF'), .5)
+        self.backend.apply(dict(self.state, color='#0000FF'), 2)
+        self.assertEqual(self.device.saves, 0)
 
     def test_switch_from_palette_mode_to_direct_tracks_active_mode(self):
         stale = self.device.set_mode
