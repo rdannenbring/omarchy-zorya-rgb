@@ -428,6 +428,28 @@ Ui.Panel {
                                 Accessible.name: "Flash lighting on new notifications"
                                 onToggled: root.backend.update({notify_flash: checked})
                             }
+                            RowLayout {
+                                visible: root.backend.state.notify_flash === true
+                                Label { text: "Flash length"; Layout.preferredWidth: 84 }
+                                Slider {
+                                    Layout.fillWidth: true
+                                    from: 0.1; to: 1; stepSize: 0.05; value: root.backend.state.flash_speed || 0.25
+                                    Accessible.name: "Seconds per notification flash"
+                                    onMoved: root.backend.update({flash_speed: Math.round(value * 100) / 100})
+                                }
+                                Label { text: Number(root.backend.state.flash_speed || 0.25).toFixed(2) + " s"; Layout.preferredWidth: 44; horizontalAlignment: Text.AlignRight }
+                            }
+                            RowLayout {
+                                visible: root.backend.state.notify_flash === true
+                                Label { text: "Flashes"; Layout.preferredWidth: 84 }
+                                Slider {
+                                    Layout.fillWidth: true
+                                    from: 1; to: 6; stepSize: 1; value: root.backend.state.flash_count || 2
+                                    Accessible.name: "Number of notification flashes"
+                                    onMoved: root.backend.update({flash_count: Math.round(value)})
+                                }
+                                Label { text: String(root.backend.state.flash_count || 2); Layout.preferredWidth: 44; horizontalAlignment: Text.AlignRight }
+                            }
                             Switch {
                                 text: "Light the active workspace key"
                                 checked: root.backend.state.workspace_keys === true

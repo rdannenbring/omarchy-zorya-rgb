@@ -11,7 +11,7 @@ import threading
 import uuid
 
 DEFAULT_STATE = {'on': True, 'color': '#FFFFFF', 'brightness': 100, 'effect': 'static',
-                 'speed': 1.0, 'secondary_color': '#0088FF', 'theme_sync': False, 'hardware_modes': {}, 'notify_flash': False, 'workspace_keys': False, 'devices': [], 'presets': []}
+                 'speed': 1.0, 'secondary_color': '#0088FF', 'theme_sync': False, 'hardware_modes': {}, 'notify_flash': False, 'flash_count': 2, 'flash_speed': 0.25, 'workspace_keys': False, 'devices': [], 'presets': []}
 SETTINGS = frozenset(DEFAULT_STATE) - {'presets'}
 
 
@@ -36,6 +36,14 @@ def validate_patch(state, patch):
         elif key == 'brightness':
             if type(value) is not int or not 0 <= value <= 100:
                 raise ValueError('brightness must be an integer from 0 to 100')
+        elif key == 'flash_count':
+            if type(value) is not int or not 1 <= value <= 6:
+                raise ValueError('flash_count must be an integer from 1 to 6')
+        elif key == 'flash_speed':
+            # Seconds per flash pulse.
+            if type(value) not in (int,float) or not math.isfinite(value) or not .1 <= value <= 1:
+                raise ValueError('flash_speed must be from 0.1 to 1 seconds per flash')
+            value = float(value)
         elif key == 'speed':
             if type(value) not in (int,float) or not math.isfinite(value) or not .1 <= value <= 5:
                 raise ValueError('speed must be a finite number from 0.1 to 5')

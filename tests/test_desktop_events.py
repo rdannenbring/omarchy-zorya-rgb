@@ -73,11 +73,19 @@ class DaemonOverlayTests(unittest.TestCase):
         self.assertNotIn('overlay', self.daemon.effective_state(self.state, 0))
 
     def test_flash_fades_and_expires(self):
+        state = dict(self.state, flash_speed=.2, flash_count=3)
         self.daemon.on_notification('critical'); started = self.daemon.flash_started
-        overlay = self.daemon.effective_state(self.state, started + .2)['overlay']
+        overlay = self.daemon.effective_state(state, started + .1)['overlay']
         self.assertAlmostEqual(overlay['flash'], 1.0); self.assertEqual(overlay['flash_color'], CRITICAL_COLOR)
-        self.assertNotIn('overlay', self.daemon.effective_state(self.state, started + 1))
+        self.assertIn('overlay', self.daemon.effective_state(state, started + .55))
+        self.assertNotIn('overlay', self.daemon.effective_state(state, started + .61))
         self.assertIsNone(self.daemon.flash_started)
+
+    def test_flash_settings_are_validated(self):
+        from zorya_rgb.state import validate_patch
+        self.assertEqual(validate_patch(DEFAULT_STATE, {'flash_count': 4, 'flash_speed': .1})['flash_count'], 4)
+        for bad in ({'flash_count': 0}, {'flash_count': 2.0}, {'flash_speed': .05}, {'flash_speed': 2}):
+            with self.assertRaises(ValueError): validate_patch(DEFAULT_STATE, bad)
 
     def test_disabled_settings_ignore_events(self):
         self.daemon.on_workspace(2); self.daemon.on_notification('normal')

@@ -18,7 +18,7 @@ from .openrgb_backend import OpenRGBBackend
 
 LOG=logging.getLogger(__name__)
 MAX_MESSAGE=128*1024
-FLASH_SECONDS=.8; FLASH_PULSE=.4; CRITICAL_COLOR='#FF2020'
+CRITICAL_COLOR='#FF2020'
 
 
 def default_socket_path():
@@ -144,9 +144,9 @@ class ZoryaDaemon:
         overlay={}
         with self.lock: started=self.flash_started; kind=self.flash_kind; workspace=self.workspace
         if state.get('notify_flash') and started is not None:
-            elapsed=now-started
-            if 0<=elapsed<FLASH_SECONDS:
-                overlay['flash']=math.sin(math.pi*elapsed/FLASH_PULSE)**2
+            elapsed=now-started; pulse=state.get('flash_speed',.25)
+            if 0<=elapsed<pulse*state.get('flash_count',2):
+                overlay['flash']=math.sin(math.pi*elapsed/pulse)**2
                 overlay['flash_color']=CRITICAL_COLOR if kind=='critical' else state['secondary_color']
             else:
                 with self.lock:
