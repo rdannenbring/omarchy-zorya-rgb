@@ -8,6 +8,9 @@ from .effects import frame, rgb
 from .sdk_transport import validate_mode_colors
 
 HAS_SPEED=1; HAS_BRIGHTNESS=16; PER_LED=32; MODE_COLORS=64; MANUAL_SAVE=256
+# OpenRGB applies mode updates on a deferred device thread but saves immediately,
+# so a save sent with the update can store the previous state (seen as white).
+SAVE_DELAY=1.0
 
 
 def normalize_mode(original):
@@ -48,7 +51,7 @@ class OpenRGBBackend:
         if any(host not in ('127.0.0.1','::1','localhost') for host,_ in self.endpoints):
             raise ValueError('OpenRGB endpoints must be loopback')
         self.clients=[]; self.controllers={}; self.connected=False; self.error=None
-        self.endpoint_errors={}; self.device_errors={}; self.identity_warnings={}; self._prepared={}; self._last_frame={}; self._retry_after={}
+        self.endpoint_errors={}; self.device_errors={}; self.identity_warnings={}; self._prepared={}; self._last_frame={}; self._retry_after={}; self._pending_save={}
 
     def connect(self):
         self.close(); self.endpoint_errors={}
@@ -165,7 +168,7 @@ class OpenRGBBackend:
             if int(mode.flags)&PER_LED: return mode,False
         raise ValueError('No supported per-LED color mode')
 
-    def _prepare(self,device,state,persist=False):
+    def _prepare(self,device,state,persist=False,identity=None):
         original,native=self._pick_mode(device,state)
         mode=normalize_mode(original)
         validate_mode_colors(mode)
@@ -179,17 +182,32 @@ class OpenRGBBackend:
             count=max(1,mode.colors_min or 1)
             color=self._native_color(state,int(mode.flags)) if native else frame(state,1,0)[0]
             mode.colors=[self._color(*color) for _ in range(count)]
-        # Save the packed new mode itself; save_mode() would resend the cached old one.
-        # Onboard storage keeps the color across replugs and wireless use.
-        device.set_mode(mode,save=bool(persist and int(mode.flags)&MANUAL_SAVE))
-        # The SDK refresh can report the previous active mode; set_colors then validates
-        # LED frames against that mode's palette limits and fails.
-        device.active_mode=mode.id
+        self._set_mode(device,mode,identity,persist)
         # SDK set_mode refreshes the device. Normalize refreshed modes too.
         device.modes=[normalize_mode(m) for m in device.modes]
         if state['on'] and state['effect']=='pulse' and self.onboard_pulse is not None:
             if self.onboard_pulse(device,state): return True,int(mode.flags),True
         return native,int(mode.flags),int(getattr(mode,'color_mode',0))==2
+
+    def _set_mode(self,device,mode,identity,persist):
+        device.set_mode(mode)
+        # The SDK refresh can report the previous active mode; set_colors then validates
+        # LED frames against that mode's palette limits and fails.
+        device.active_mode=mode.id
+        # Onboard storage keeps the color across replugs and wireless use. The save is
+        # sent later, once the deferred update has reached the hardware.
+        if persist and int(mode.flags)&MANUAL_SAVE: self._pending_save[identity]=[copy.deepcopy(mode),None]
+        else: self._pending_save.pop(identity,None)
+
+    def _save_when_due(self,identity,device,elapsed):
+        pending=self._pending_save.get(identity)
+        if pending is None: return
+        if pending[1] is None: pending[1]=elapsed+SAVE_DELAY
+        if elapsed<pending[1]: return
+        del self._pending_save[identity]
+        # Resending the identical mode is idempotent; the save then captures it.
+        device.set_mode(pending[0],save=True)
+        device.active_mode=pending[0].id
 
     @staticmethod
     def _native_color(state,flags):
@@ -233,10 +251,11 @@ class OpenRGBBackend:
                 previous=self._prepared.get(identity)
                 changed=force or previous is None or previous[0]!=signature
                 if changed:
-                    native,flags,palette=self._prepare(device,state,persist)
+                    native,flags,palette=self._prepare(device,state,persist,identity)
                     self._prepared[identity]=(signature,native,flags,palette)
                 else:
                     _,native,flags,palette=previous
+                self._save_when_due(identity,device,elapsed)
                 static=not state['on'] or state['effect']=='static'
                 if not changed and (static or native): continue
                 # Explicit USB/HID transports can stream; unknown buses stay capped.
@@ -263,4 +282,4 @@ class OpenRGBBackend:
         for _,client in self.clients:
             try: client.disconnect()
             except Exception: pass
-        self.clients=[]; self.controllers={}; self._prepared={}; self._last_frame={}; self._retry_after={}; self.connected=False
+        self.clients=[]; self.controllers={}; self._prepared={}; self._last_frame={}; self._retry_after={}; self._pending_save={}; self.connected=False
