@@ -27,7 +27,10 @@ Ui.Panel {
     }
     property string inputError: ""
     property Service backend: Service { active: root.opened }
-    readonly property string selectedColor: root.backend.state.color || "#FFFFFF"
+    readonly property bool themeSync: root.backend.state.theme_sync === true
+    readonly property var themeColors: root.themeSync ? root.backend.state.theme || null : null
+    readonly property string selectedColor: root.themeColors ? root.themeColors.primary : root.backend.state.color || "#FFFFFF"
+    readonly property string secondaryColor: root.themeColors ? root.themeColors.secondary : root.backend.state.secondary_color || "#0088FF"
     readonly property var rgb: Colors.rgb(selectedColor)
     readonly property var hsv: Colors.hsv(selectedColor)
     readonly property var selectedIds: Array.isArray(root.backend.state.devices) ? root.backend.state.devices : []
@@ -262,6 +265,33 @@ Ui.Panel {
                             spacing: 12
                             RowLayout {
                                 Layout.fillWidth: true
+                                Switch {
+                                    text: "Match Omarchy theme"
+                                    checked: root.themeSync
+                                    Accessible.name: "Match Omarchy theme colors"
+                                    onToggled: root.backend.update({theme_sync: checked})
+                                }
+                                Item { Layout.fillWidth: true }
+                                Repeater {
+                                    model: root.themeColors ? root.themeColors.palette : []
+                                    Rectangle {
+                                        required property string modelData
+                                        implicitWidth: 14; implicitHeight: 14; radius: 7; color: modelData
+                                    }
+                                }
+                            }
+                            Label {
+                                visible: root.themeSync
+                                Layout.fillWidth: true
+                                wrapMode: Text.Wrap; font.pixelSize: 10; opacity: 0.65
+                                text: root.themeColors
+                                    ? "Colors follow the theme's " + root.themeColors.source + ". Rainbow cycles the theme palette. Theme changes are saved to devices that support onboard memory."
+                                    : "Waiting for theme colors. Themes need colors.toml with an accent, or keyboard.rgb."
+                            }
+                            RowLayout {
+                                Layout.fillWidth: true
+                                enabled: !root.themeSync
+                                opacity: enabled ? 1 : 0.5
                                 ColorWheel {
                                     Layout.preferredWidth: 224
                                     Layout.preferredHeight: 224
@@ -298,6 +328,8 @@ Ui.Panel {
                             }
                             RowLayout {
                                 Layout.fillWidth: true
+                                enabled: !root.themeSync
+                                opacity: enabled ? 1 : 0.5
                                 Repeater {
                                     model: ["R", "G", "B"]
                                     RowLayout {
@@ -321,6 +353,8 @@ Ui.Panel {
                                 }
                             }
                             RowLayout {
+                                enabled: !root.themeSync
+                                opacity: enabled ? 1 : 0.5
                                 Label { text: "Saturation"; Layout.preferredWidth: 84 }
                                 Slider {
                                     Layout.fillWidth: true
@@ -364,11 +398,13 @@ Ui.Panel {
                             }
                             RowLayout {
                                 visible: root.backend.state.effect === "gradient"
+                                enabled: !root.themeSync
+                                opacity: enabled ? 1 : 0.5
                                 Label { text: "Second color"; Layout.preferredWidth: 84 }
-                                Rectangle { implicitWidth: 26; implicitHeight: 26; radius: 6; color: root.backend.state.secondary_color }
+                                Rectangle { implicitWidth: 26; implicitHeight: 26; radius: 6; color: root.secondaryColor }
                                 RoundedTextField {
                                     Layout.fillWidth: true
-                                    text: root.backend.state.secondary_color
+                                    text: root.secondaryColor
                                     maximumLength: 7
                                     Accessible.name: "Gradient second HEX color"
                                     onEditingFinished: {

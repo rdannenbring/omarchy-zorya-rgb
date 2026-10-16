@@ -7,6 +7,14 @@ def rgb(hex_color):
     return tuple(int(hex_color[i:i+2],16) for i in (1,3,5))
 
 
+def _cycle(palette,position):
+    # Blend smoothly around a closed loop of theme colors instead of the full spectrum.
+    colors=[rgb(c) for c in palette]
+    scaled=(position%1)*len(colors); index=int(scaled); weight=scaled-index
+    start=colors[index]; end=colors[(index+1)%len(colors)]
+    return tuple(a+(b-a)*weight for a,b in zip(start,end))
+
+
 def frame(state,count,elapsed):
     if count<=0: return []
     if not state['on']: return [(0,0,0)]*count
@@ -18,6 +26,8 @@ def frame(state,count,elapsed):
         if effect=='pulse':
             scale *= (1+math.cos(phase*2*math.pi))/2
             color=primary
+        elif effect=='rainbow' and state.get('palette'):
+            color=_cycle(state['palette'],phase/5+i/count)
         elif effect=='rainbow':
             color=tuple(v*255 for v in colorsys.hsv_to_rgb((phase/5+i/count)%1,1,1))
         elif effect=='gradient':

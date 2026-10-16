@@ -15,7 +15,7 @@ class Backend:
     def close(self): self.connected=False
     def refresh(self): return self.connected
     def devices(self,selected): return [{'id':'test','name':'Fake','modes':['Direct'],'led_count':1,'location':'USB','selected':'test' in selected}]
-    def apply(self,state,elapsed,force=False): self.applied.append(state); return {'errors':{},'applied':True}
+    def apply(self,state,elapsed,force=False,persist=False): self.applied.append(state); return {'errors':{},'applied':True}
 
 class DaemonTests(unittest.TestCase):
     def setUp(self):
@@ -56,7 +56,7 @@ class DaemonTests(unittest.TestCase):
         self.assertIn('color',self.call('status'))
     def test_hardware_apply_cannot_block_status_ipc(self):
         entered=threading.Event(); release=threading.Event()
-        def slow(state,elapsed,force=False):
+        def slow(state,elapsed,force=False,persist=False):
             entered.set(); release.wait(1); return {'errors':{}}
         self.backend.apply=slow
         self.call('restore'); self.assertTrue(entered.wait(1))

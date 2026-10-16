@@ -148,14 +148,16 @@ class OpenRGBBackend:
     def _pick_mode(self,device,state):
         modes=list(device.modes)
         effect=state['effect'] if state['on'] else 'static'
-        if effect in ('pulse','rainbow') and not (effect=='pulse' and self._prefer_direct_pulse(device)):
+        # Native rainbow modes cycle the full spectrum, so a theme palette needs frames.
+        themed_rainbow=effect=='rainbow' and bool(state.get('palette'))
+        if effect in ('pulse','rainbow') and not themed_rainbow and not (effect=='pulse' and self._prefer_direct_pulse(device)):
             wanted=('pulse','breathing','breath') if effect=='pulse' else ('rainbow','color cycle','spectrum cycle')
             for mode in modes:
                 flags=int(mode.flags)
                 if mode.name.lower() in wanted and flags & HAS_SPEED and (effect=='pulse' or state['brightness']==100 or flags & HAS_BRIGHTNESS):
                     if effect=='pulse' and not flags & (PER_LED|MODE_COLORS): continue
                     return mode,True
-        wanted=('static','direct') if effect=='static' else ('direct','static')
+        wanted=('static','solid color','direct') if effect=='static' else ('direct','static')
         for name in wanted:
             for mode in modes:
                 if mode.name.lower()==name and (int(mode.flags)&PER_LED or effect=='static' and int(mode.flags)&MODE_COLORS): return mode,False
@@ -211,10 +213,10 @@ class OpenRGBBackend:
     def _color(self,*color):
         return self.color_factory(*color) if self.color_factory else color
 
-    def apply(self,state,elapsed,force=False):
+    def apply(self,state,elapsed,force=False,persist=False):
         selected=set(state['devices'])
         errors={identity:'Selected device unavailable: '+identity for identity in selected-self.controllers.keys()}
-        signature=tuple((key,str(state[key])) for key in ('on','color','brightness','effect','speed','secondary_color'))
+        signature=tuple((key,str(state.get(key))) for key in ('on','color','brightness','effect','speed','secondary_color','palette'))
         for identity,device in self.controllers.items():
             if identity not in selected:
                 self._prepared.pop(identity,None); self._last_frame.pop(identity,None)
@@ -228,6 +230,9 @@ class OpenRGBBackend:
                 if changed:
                     native,flags,palette=self._prepare(device,state)
                     self._prepared[identity]=(signature,native,flags,palette)
+                    if persist and flags&MANUAL_SAVE:
+                        # Onboard storage keeps the color across replugs and wireless use.
+                        device.save_mode()
                 else:
                     _,native,flags,palette=previous
                 static=not state['on'] or state['effect']=='static'

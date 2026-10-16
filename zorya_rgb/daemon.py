@@ -11,6 +11,7 @@ import stat
 import threading
 import time
 from .state import StateStore
+from . import theme as theme_colors
 from .openrgb_backend import OpenRGBBackend
 
 LOG=logging.getLogger(__name__)
@@ -53,7 +54,7 @@ def recover_hardware(readiness=None):
 
 
 class ZoryaDaemon:
-    def __init__(self,store=None,backend=None,socket_path=None,recovery=None):
+    def __init__(self,store=None,backend=None,socket_path=None,recovery=None,theme_reader=None):
         self.store=store or StateStore(); self.backend=backend or OpenRGBBackend()
         self.socket_path=Path(socket_path) if socket_path else default_socket_path()
         self.recovery=recovery or recover_hardware
@@ -62,13 +63,16 @@ class ZoryaDaemon:
         self.setup={'daemon':True}; self.applying=True; self.listener=None; self.worker=None
         self.recovery_pending=False; self._next_recovery=0; self._recovery_deadline=0
         self._lock_file=None
+        self.theme_reader=theme_reader or theme_colors.colors
+        self.theme=None; self.persist=False; self._next_theme=0
 
     def status(self):
         with self.lock:
             state=self.store.snapshot()
             state.update(connected=self.connected,error=self.error or self.store.error,
                          setup=self.setup,device_count=len(self.device_cache),applying=self.applying,
-                         missing_devices=sorted(set(state['devices'])-{d['id'] for d in self.device_cache}))
+                         missing_devices=sorted(set(state['devices'])-{d['id'] for d in self.device_cache}),
+                         theme=self.theme)
             return state
 
     def dispatch(self,message):
@@ -81,7 +85,12 @@ class ZoryaDaemon:
                 devices=[dict(d,selected=d['id'] in selected) for d in self.device_cache]
                 return {'devices':devices,'error':self.error or self.store.error}
         with self.lock:
-            if command=='set': self.store.update(message.get('patch'))
+            if command=='set':
+                before=self.store.snapshot()['theme_sync']
+                self.store.update(message.get('patch'))
+                if self.store.snapshot()['theme_sync'] and not before:
+                    # Enabling sync is an explicit choice to store the theme color onboard.
+                    self.theme=None; self._next_theme=0; self.persist=True
             elif command=='preset_save': self.store.save_preset(message.get('name'))
             elif command=='preset_apply': self.store.apply_preset(message.get('id'))
             elif command=='preset_delete': self.store.delete_preset(message.get('id'))
@@ -89,6 +98,29 @@ class ZoryaDaemon:
             else: raise ValueError('Unknown daemon command')
             self.revision+=1; self.applying=True; self.wake.set()
             return self.status()
+
+    def _check_theme(self,now):
+        # Poll the theme files: omarchy-theme-set swaps the current/theme symlink,
+        # so watching one file would miss switches. Reads are small and bounded.
+        if now<self._next_theme: return
+        self._next_theme=now+1
+        if not self.store.snapshot()['theme_sync']:
+            with self.lock: self.theme=None
+            return
+        try: colors=self.theme_reader()
+        except Exception as exc:
+            LOG.warning("Theme colors unavailable (%s)",type(exc).__name__); colors=None
+        with self.lock:
+            if colors==self.theme: return
+            # The first read after startup only restores; flash is written on real changes.
+            if self.theme is not None and colors is not None: self.persist=True
+            self.theme=colors; self.force=True
+
+    def effective_state(self,state):
+        """Overlay theme colors on saved settings while theme sync is enabled."""
+        colors=self.theme if state.get('theme_sync') else None
+        if not colors: return state
+        return dict(state,color=colors['primary'],secondary_color=colors['secondary'],palette=colors['palette'])
 
     def _cache(self):
         with self.lock:
@@ -169,13 +201,15 @@ class ZoryaDaemon:
                 else:
                     if now>=next_discovery:
                         self.backend.refresh(); next_discovery=now+15
+                    self._check_theme(now)
                     self._cache()
                     with self.lock:
                         ids=tuple(d['id'] for d in self.device_cache)
                         if ids!=old_ids: self.force=True; old_ids=ids
-                        state=self.store.snapshot(); revision=self.revision; force=self.force; self.force=False
+                        state=self.effective_state(self.store.snapshot()); revision=self.revision; force=self.force; self.force=False
+                        persist=self.persist; self.persist=False
                     if state['on'] and state['effect']!='static': interval=1/30
-                    result=self.backend.apply(state,now-origin,force=force)
+                    result=self.backend.apply(state,now-origin,force=force,persist=persist)
                     with self.lock:
                         self.error='; '.join(result.get('errors',{}).values()) or self.backend.error
                         if revision==self.revision: self.applying=False
