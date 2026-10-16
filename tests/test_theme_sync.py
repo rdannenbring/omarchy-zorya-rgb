@@ -79,6 +79,14 @@ class BackendPersistTests(unittest.TestCase):
         self.backend.apply(dict(self.state, color='#00FF00'), 1, persist=True)
         self.assertEqual(self.device.saves, 1)
 
+    def test_switch_from_palette_mode_to_direct_tracks_active_mode(self):
+        stale = self.device.set_mode
+        def keep_previous(mode, save=False):
+            previous = self.device.active_mode; stale(mode, save); self.device.active_mode = previous
+        self.device.set_mode = keep_previous
+        self.backend.apply(dict(self.state, effect='rainbow'), 0)
+        self.assertEqual(self.device.active_mode, 1)
+
     def test_themed_rainbow_streams_palette_frames(self):
         self.backend.apply(dict(self.state, effect='rainbow', palette=['#FF0000', '#0000FF']), 0)
         self.assertEqual(self.device.writes[-1][0], (255, 0, 0))

@@ -182,6 +182,9 @@ class OpenRGBBackend:
         # Save the packed new mode itself; save_mode() would resend the cached old one.
         # Onboard storage keeps the color across replugs and wireless use.
         device.set_mode(mode,save=bool(persist and int(mode.flags)&MANUAL_SAVE))
+        # The SDK refresh can report the previous active mode; set_colors then validates
+        # LED frames against that mode's palette limits and fails.
+        device.active_mode=mode.id
         # SDK set_mode refreshes the device. Normalize refreshed modes too.
         device.modes=[normalize_mode(m) for m in device.modes]
         if state['on'] and state['effect']=='pulse' and self.onboard_pulse is not None:
