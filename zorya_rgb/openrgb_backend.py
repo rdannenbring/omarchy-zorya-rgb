@@ -220,6 +220,33 @@ class OpenRGBBackend:
             if self.onboard_pulse(device,state): return True,int(mode.flags),True
         return native,int(mode.flags),int(getattr(mode,'color_mode',0))==2
 
+    @staticmethod
+    def _key_colors(device,keys):
+        if not keys: return {}
+        return {index:rgb(keys[str(getattr(led,'name',''))]) for index,led in enumerate(getattr(device,'leds',[]))
+                if str(getattr(led,'name','')) in keys}
+
+    def _prepare_direct(self,device,identity):
+        original=next((m for m in device.modes if str(m.name).lower()=='direct' and int(m.flags)&PER_LED),None)
+        original=original or next((m for m in device.modes if int(m.flags)&PER_LED),None)
+        if original is None: raise ValueError('No per-LED mode for desktop events')
+        mode=normalize_mode(original)
+        if int(mode.flags)&HAS_BRIGHTNESS: mode.brightness=mode.brightness_max
+        # Temporary: leaves any pending onboard save for the base mode untouched.
+        device.set_mode(mode); device.active_mode=mode.id
+        device.modes=[normalize_mode(m) for m in device.modes]
+        return False,int(mode.flags),False
+
+    @staticmethod
+    def _apply_overlay(colors,flash,flash_color,keys):
+        result=list(colors)
+        if flash:
+            target=rgb(flash_color)
+            result=[tuple(round(a+(b-a)*flash) for a,b in zip(color,target)) for color in result]
+        for index,color in keys.items():
+            if index<len(result): result[index]=color
+        return result
+
     def _set_mode(self,device,mode,identity,persist):
         device.set_mode(mode)
         # The SDK refresh can report the previous active mode; set_colors then validates
@@ -227,8 +254,13 @@ class OpenRGBBackend:
         device.active_mode=mode.id
         # Onboard storage keeps the color across replugs and wireless use. The save is
         # sent later, once the deferred update has reached the hardware.
+        pending=self._pending_save.get(identity)
         if persist and int(mode.flags)&MANUAL_SAVE: self._pending_save[identity]=[copy.deepcopy(mode),None]
-        else: self._pending_save.pop(identity,None)
+        elif pending and self._mode_key(pending[0])!=self._mode_key(mode): self._pending_save.pop(identity,None)
+
+    @staticmethod
+    def _mode_key(mode):
+        return (mode.id,repr(mode.colors))
 
     def _save_when_due(self,identity,device,elapsed):
         pending=self._pending_save.get(identity)
@@ -280,15 +312,24 @@ class OpenRGBBackend:
                 continue
             try:
                 previous=self._prepared.get(identity)
-                device_signature=signature+(('hardware_mode',state.get('hardware_modes',{}).get(identity)),)
+                overlay=state.get('overlay') if state['on'] else None
+                keys=self._key_colors(device,overlay.get('keys',{})) if overlay else {}
+                flash=overlay.get('flash') if overlay else None
+                overlaid=flash is not None or bool(keys)
+                device_signature=signature+(('hardware_mode',state.get('hardware_modes',{}).get(identity)),
+                                            ('overlay',overlaid,tuple(sorted(keys.items()))))
                 changed=force or previous is None or previous[0]!=device_signature
-                if changed:
+                if changed and overlaid:
+                    # Event overlays need per-LED frames; the base mode returns when they end.
+                    native,flags,palette=self._prepare_direct(device,identity)
+                elif changed:
                     native,flags,palette=self._prepare(device,state,persist,identity)
+                if changed:
                     self._prepared[identity]=(device_signature,native,flags,palette)
                 else:
                     _,native,flags,palette=previous
-                self._save_when_due(identity,device,elapsed)
-                static=not state['on'] or state['effect']=='static'
+                if not overlaid: self._save_when_due(identity,device,elapsed)
+                static=(not state['on'] or state['effect']=='static') and flash is None
                 if not changed and (static or native): continue
                 # Explicit USB/HID transports can stream; unknown buses stay capped.
                 if not changed and elapsed-self._last_frame.get(identity,-1)<self._frame_interval(device): continue
@@ -300,6 +341,7 @@ class OpenRGBBackend:
                     colors=[self._native_color(state,flags)]*len(device.leds)
                 else:
                     colors=frame(state,len(device.leds),elapsed)
+                if overlaid: colors=self._apply_overlay(colors,flash,overlay.get('flash_color'),keys)
                 device.set_colors([self._color(*c) for c in colors],fast=True)
                 self._last_frame[identity]=elapsed
                 self.device_errors.pop(identity,None)

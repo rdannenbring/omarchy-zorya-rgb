@@ -11,7 +11,7 @@ import threading
 import uuid
 
 DEFAULT_STATE = {'on': True, 'color': '#FFFFFF', 'brightness': 100, 'effect': 'static',
-                 'speed': 1.0, 'secondary_color': '#0088FF', 'theme_sync': False, 'hardware_modes': {}, 'devices': [], 'presets': []}
+                 'speed': 1.0, 'secondary_color': '#0088FF', 'theme_sync': False, 'hardware_modes': {}, 'notify_flash': False, 'workspace_keys': False, 'devices': [], 'presets': []}
 SETTINGS = frozenset(DEFAULT_STATE) - {'presets'}
 
 
@@ -27,7 +27,7 @@ def validate_patch(state, patch):
         raise ValueError('Unknown settings: '+', '.join(sorted(unknown)))
     result = copy.deepcopy(state)
     for key, value in patch.items():
-        if key in ('on', 'theme_sync'):
+        if key in ('on', 'theme_sync', 'notify_flash', 'workspace_keys'):
             if type(value) is not bool: raise ValueError(key+' must be a boolean')
         elif key in ('color', 'secondary_color'):
             if not isinstance(value,str) or not re.fullmatch(r'#[0-9a-fA-F]{6}',value):

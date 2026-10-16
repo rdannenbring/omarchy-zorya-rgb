@@ -421,6 +421,24 @@ Ui.Panel {
                                     }
                                 }
                             }
+                            Label { text: "DESKTOP EVENTS"; font.pixelSize: 11; font.letterSpacing: 2; opacity: 0.65 }
+                            Switch {
+                                text: "Flash on notifications"
+                                checked: root.backend.state.notify_flash === true
+                                Accessible.name: "Flash lighting on new notifications"
+                                onToggled: root.backend.update({notify_flash: checked})
+                            }
+                            Switch {
+                                text: "Light the active workspace key"
+                                checked: root.backend.state.workspace_keys === true
+                                Accessible.name: "Highlight the active workspace number key"
+                                onToggled: root.backend.update({workspace_keys: checked})
+                            }
+                            Label {
+                                Layout.fillWidth: true
+                                wrapMode: Text.Wrap; font.pixelSize: 10; opacity: 0.65
+                                text: "Events use the second color; critical notifications flash red and still show during Do Not Disturb. Keyboards with named keys light the number key for workspaces 1 to 10. Devices on an onboard mode switch to per-key control while an event shows."
+                            }
                             Label { text: "SAVED SCENES"; font.pixelSize: 11; font.letterSpacing: 2; opacity: 0.65 }
                             RowLayout {
                                 Layout.fillWidth: true

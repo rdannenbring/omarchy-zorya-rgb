@@ -68,7 +68,8 @@ class BackendPersistTests(unittest.TestCase):
     def setUp(self):
         from test_backend_sdk import Client, Device
         from zorya_rgb.openrgb_backend import OpenRGBBackend
-        self.device = Device(); self.device.modes[0].name = 'Solid Color'
+        self.device = Device(); solid = self.device.modes[0]
+        solid.name, solid.flags, solid.color_mode = 'Solid Color', 64 | 256, 2
         self.backend = OpenRGBBackend(client_factory=lambda: Client([self.device]), color_factory=lambda *c: c)
         self.backend.connect()
         self.state = dict(DEFAULT_STATE, devices=[d['id'] for d in self.backend.devices([])])
@@ -82,7 +83,7 @@ class BackendPersistTests(unittest.TestCase):
         self.assertEqual(self.device.saves, 0)
         self.backend.apply(dict(self.state, color='#00FF00'), 2.1)
         self.assertEqual(self.device.saves, 1)
-        self.assertEqual(self.device.mode_writes[-1].name, 'Solid Color')
+        self.assertEqual(self.device.mode_writes[-1].colors, [(0, 255, 0)])
 
     def test_newer_change_cancels_a_pending_save(self):
         self.backend.apply(dict(self.state, color='#00FF00'), 0, persist=True)

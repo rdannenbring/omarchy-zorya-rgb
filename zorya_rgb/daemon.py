@@ -2,6 +2,7 @@
 from __future__ import annotations
 import fcntl
 import json
+import math
 import logging
 import os
 from pathlib import Path
@@ -12,10 +13,12 @@ import threading
 import time
 from .state import StateStore
 from . import theme as theme_colors
+from . import events as desktop_events
 from .openrgb_backend import OpenRGBBackend
 
 LOG=logging.getLogger(__name__)
 MAX_MESSAGE=128*1024
+FLASH_SECONDS=.8; FLASH_PULSE=.4; CRITICAL_COLOR='#FF2020'
 
 
 def default_socket_path():
@@ -65,6 +68,7 @@ class ZoryaDaemon:
         self._lock_file=None
         self.theme_reader=theme_reader or theme_colors.colors
         self.theme=None; self.persist=False; self._next_theme=0
+        self.workspace=None; self.flash_started=None; self.flash_kind=None; self.listeners={}
 
     def status(self):
         with self.lock:
@@ -119,11 +123,45 @@ class ZoryaDaemon:
             if self.theme is not None and colors is not None: self.persist=True
             self.theme=colors; self.force=True
 
-    def effective_state(self,state):
-        """Overlay theme colors on saved settings while theme sync is enabled."""
+    def on_workspace(self,workspace):
+        with self.lock: self.workspace=workspace
+        self.wake.set()
+
+    def on_notification(self,kind):
+        with self.lock: self.flash_started=time.monotonic(); self.flash_kind=kind
+        self.wake.set()
+
+    def _ensure_listeners(self,state):
+        # Listeners start only once their setting is first enabled and then stay idle-cheap.
+        wanted={'workspace':state.get('workspace_keys'),'notify':state.get('notify_flash')}
+        for name,enabled in wanted.items():
+            if not enabled or name in self.listeners: continue
+            listener=(desktop_events.WorkspaceListener(self.stopping,self.on_workspace) if name=='workspace'
+                      else desktop_events.NotificationListener(self.stopping,self.on_notification))
+            listener.start(); self.listeners[name]=listener
+
+    def _overlay(self,state,now):
+        overlay={}
+        with self.lock: started=self.flash_started; kind=self.flash_kind; workspace=self.workspace
+        if state.get('notify_flash') and started is not None:
+            elapsed=now-started
+            if 0<=elapsed<FLASH_SECONDS:
+                overlay['flash']=math.sin(math.pi*elapsed/FLASH_PULSE)**2
+                overlay['flash_color']=CRITICAL_COLOR if kind=='critical' else state['secondary_color']
+            else:
+                with self.lock:
+                    if self.flash_started==started: self.flash_started=None
+        if state.get('workspace_keys') and workspace is not None and 1<=workspace<=10:
+            overlay['keys']={'Key: %d'%(workspace%10):state['secondary_color']}
+        return overlay
+
+    def effective_state(self,state,now=None):
+        """Overlay theme colors and desktop events on saved settings."""
         colors=self.theme if state.get('theme_sync') else None
-        if not colors: return state
-        return dict(state,color=colors['primary'],secondary_color=colors['secondary'],palette=colors['palette'])
+        if colors:
+            state=dict(state,color=colors['primary'],secondary_color=colors['secondary'],palette=colors['palette'])
+        overlay=self._overlay(state,time.monotonic() if now is None else now)
+        return dict(state,overlay=overlay) if overlay else state
 
     def _cache(self):
         with self.lock:
@@ -209,9 +247,11 @@ class ZoryaDaemon:
                     with self.lock:
                         ids=tuple(d['id'] for d in self.device_cache)
                         if ids!=old_ids: self.force=True; old_ids=ids
-                        state=self.effective_state(self.store.snapshot()); revision=self.revision; force=self.force; self.force=False
+                        saved=self.store.snapshot()
+                        state=self.effective_state(saved,now); revision=self.revision; force=self.force; self.force=False
                         persist=self.persist; self.persist=False
-                    if state['on'] and state['effect']!='static': interval=1/30
+                    self._ensure_listeners(saved)
+                    if state['on'] and state['effect']!='static' or 'flash' in state.get('overlay',{}): interval=1/30
                     result=self.backend.apply(state,now-origin,force=force,persist=persist)
                     with self.lock:
                         self.error='; '.join(result.get('errors',{}).values()) or self.backend.error
