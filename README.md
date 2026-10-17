@@ -93,7 +93,7 @@ Each device in the **Devices** tab has a mode picker. Leave it on **Zorya effect
 
 Under **Desktop events** in the color tab:
 
-- **Flash on notifications** flashes your devices briefly in the second color when a notification arrives. Critical notifications flash red, even during Do Not Disturb.
+- **Alert on notifications** shows an alert on your devices when a notification arrives. Choose the effect (flash, strobe or solid), how long it lasts, how fast it cycles, and its color. Critical notifications use their own color, even during Do Not Disturb.
 - **Light the active workspace key** lights the number key of your current Hyprland workspace on keyboards that report key names.
 
 Devices running an onboard mode switch to per-key control while an event shows. The workspace highlight is always showing while it is enabled.

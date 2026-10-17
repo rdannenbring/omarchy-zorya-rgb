@@ -5,7 +5,7 @@ import types
 import unittest
 from test_backend_sdk import Client, Device
 from zorya_rgb import events
-from zorya_rgb.daemon import ZoryaDaemon, CRITICAL_COLOR
+from zorya_rgb.daemon import ZoryaDaemon, alert_level
 from zorya_rgb.openrgb_backend import OpenRGBBackend
 from zorya_rgb.state import DEFAULT_STATE, StateStore
 
@@ -73,18 +73,31 @@ class DaemonOverlayTests(unittest.TestCase):
         self.assertNotIn('overlay', self.daemon.effective_state(self.state, 0))
 
     def test_flash_fades_and_expires(self):
-        state = dict(self.state, flash_speed=.2, flash_count=3)
+        state = dict(self.state, alert_speed=.2, alert_duration=3.0)
         self.daemon.on_notification('critical'); started = self.daemon.flash_started
         overlay = self.daemon.effective_state(state, started + .1)['overlay']
-        self.assertAlmostEqual(overlay['flash'], 1.0); self.assertEqual(overlay['flash_color'], CRITICAL_COLOR)
-        self.assertIn('overlay', self.daemon.effective_state(state, started + .55))
-        self.assertNotIn('overlay', self.daemon.effective_state(state, started + .61))
+        self.assertAlmostEqual(overlay['flash'], 1.0); self.assertEqual(overlay['flash_color'], '#FF2020')
+        self.assertIn('overlay', self.daemon.effective_state(state, started + 2.9))
+        self.assertNotIn('overlay', self.daemon.effective_state(state, started + 3.01))
         self.assertIsNone(self.daemon.flash_started)
 
-    def test_flash_settings_are_validated(self):
+    def test_alert_color_follows_second_color_or_custom(self):
+        self.daemon.on_notification('normal'); started = self.daemon.flash_started
+        self.assertEqual(self.daemon.effective_state(self.state, started + .1)['overlay']['flash_color'], '#00FF00')
+        custom = dict(self.state, alert_color='#123456')
+        self.assertEqual(self.daemon.effective_state(custom, started + .1)['overlay']['flash_color'], '#123456')
+
+    def test_alert_effect_levels(self):
+        self.assertEqual(alert_level('solid', 1.3, .2), 1.0)
+        self.assertEqual([alert_level('strobe', t, .2) for t in (0, .09, .11, .21)], [1.0, 1.0, 0.0, 1.0])
+        self.assertAlmostEqual(alert_level('flash', .1, .2), 1.0); self.assertAlmostEqual(alert_level('flash', 0, .2), 0.0)
+
+    def test_alert_settings_are_validated(self):
         from zorya_rgb.state import validate_patch
-        self.assertEqual(validate_patch(DEFAULT_STATE, {'flash_count': 4, 'flash_speed': .1})['flash_count'], 4)
-        for bad in ({'flash_count': 0}, {'flash_count': 2.0}, {'flash_speed': .05}, {'flash_speed': 2}):
+        good = validate_patch(DEFAULT_STATE, {'alert_effect': 'strobe', 'alert_duration': 5, 'alert_speed': .1, 'alert_color': '#abcdef'})
+        self.assertEqual((good['alert_duration'], good['alert_color']), (5.0, '#ABCDEF'))
+        for bad in ({'alert_effect': 'wave'}, {'alert_duration': .2}, {'alert_duration': 11}, {'alert_speed': 2},
+                    {'alert_color': 'red'}, {'alert_critical_color': 'auto'}):
             with self.assertRaises(ValueError): validate_patch(DEFAULT_STATE, bad)
 
     def test_disabled_settings_ignore_events(self):

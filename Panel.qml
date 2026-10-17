@@ -423,32 +423,87 @@ Ui.Panel {
                             }
                             Label { text: "DESKTOP EVENTS"; font.pixelSize: 11; font.letterSpacing: 2; opacity: 0.65 }
                             Switch {
-                                text: "Flash on notifications"
+                                text: "Alert on notifications"
                                 checked: root.backend.state.notify_flash === true
                                 Accessible.name: "Flash lighting on new notifications"
                                 onToggled: root.backend.update({notify_flash: checked})
                             }
-                            RowLayout {
+                            ColumnLayout {
+                                id: alertSettings
                                 visible: root.backend.state.notify_flash === true
-                                Label { text: "Flash length"; Layout.preferredWidth: 84 }
-                                Slider {
-                                    Layout.fillWidth: true
-                                    from: 0.1; to: 1; stepSize: 0.05; value: root.backend.state.flash_speed || 0.25
-                                    Accessible.name: "Seconds per notification flash"
-                                    onMoved: root.backend.update({flash_speed: Math.round(value * 100) / 100})
+                                Layout.fillWidth: true
+                                readonly property var st: root.backend.state
+                                readonly property bool autoColor: (st.alert_color || "auto") === "auto"
+                                RowLayout {
+                                    Label { text: "Alert effect"; Layout.preferredWidth: 84 }
+                                    RoundedComboBox {
+                                        Layout.fillWidth: true
+                                        model: ["flash", "strobe", "solid"]
+                                        currentIndex: Math.max(0, model.indexOf(alertSettings.st.alert_effect || "flash"))
+                                        Accessible.name: "Notification alert effect"
+                                        onActivated: root.backend.update({alert_effect: model[currentIndex]})
+                                    }
                                 }
-                                Label { text: Number(root.backend.state.flash_speed || 0.25).toFixed(2) + " s"; Layout.preferredWidth: 44; horizontalAlignment: Text.AlignRight }
-                            }
-                            RowLayout {
-                                visible: root.backend.state.notify_flash === true
-                                Label { text: "Flashes"; Layout.preferredWidth: 84 }
-                                Slider {
-                                    Layout.fillWidth: true
-                                    from: 1; to: 6; stepSize: 1; value: root.backend.state.flash_count || 2
-                                    Accessible.name: "Number of notification flashes"
-                                    onMoved: root.backend.update({flash_count: Math.round(value)})
+                                RowLayout {
+                                    Label { text: "Duration"; Layout.preferredWidth: 84 }
+                                    Slider {
+                                        Layout.fillWidth: true
+                                        from: 0.5; to: 10; stepSize: 0.5; value: alertSettings.st.alert_duration || 2
+                                        Accessible.name: "Alert duration in seconds"
+                                        onMoved: root.backend.update({alert_duration: Math.round(value * 2) / 2})
+                                    }
+                                    Label { text: Number(alertSettings.st.alert_duration || 2).toFixed(1) + " s"; Layout.preferredWidth: 44; horizontalAlignment: Text.AlignRight }
                                 }
-                                Label { text: String(root.backend.state.flash_count || 2); Layout.preferredWidth: 44; horizontalAlignment: Text.AlignRight }
+                                RowLayout {
+                                    visible: (alertSettings.st.alert_effect || "flash") !== "solid"
+                                    Label { text: "Cycle"; Layout.preferredWidth: 84 }
+                                    Slider {
+                                        Layout.fillWidth: true
+                                        from: 0.1; to: 1; stepSize: 0.05; value: alertSettings.st.alert_speed || 0.25
+                                        Accessible.name: "Seconds per alert flash"
+                                        onMoved: root.backend.update({alert_speed: Math.round(value * 100) / 100})
+                                    }
+                                    Label { text: Number(alertSettings.st.alert_speed || 0.25).toFixed(2) + " s"; Layout.preferredWidth: 44; horizontalAlignment: Text.AlignRight }
+                                }
+                                RowLayout {
+                                    Label { text: "Alert color"; Layout.preferredWidth: 84 }
+                                    CheckBox {
+                                        text: "Second color"
+                                        checked: alertSettings.autoColor
+                                        onToggled: root.backend.update({alert_color: checked ? "auto" : root.secondaryColor})
+                                    }
+                                    Rectangle {
+                                        implicitWidth: 22; implicitHeight: 22; radius: 6
+                                        color: alertSettings.autoColor ? root.secondaryColor : alertSettings.st.alert_color
+                                    }
+                                    RoundedTextField {
+                                        Layout.fillWidth: true
+                                        visible: !alertSettings.autoColor
+                                        text: alertSettings.st.alert_color || ""
+                                        maximumLength: 7
+                                        Accessible.name: "Alert HEX color"
+                                        onEditingFinished: {
+                                            var value = Colors.normalizeHex(text)
+                                            if (value) { root.inputError = ""; root.backend.update({alert_color: value}) }
+                                            else root.inputError = "Enter a six-digit alert color, such as #FFAA00."
+                                        }
+                                    }
+                                }
+                                RowLayout {
+                                    Label { text: "Critical"; Layout.preferredWidth: 84 }
+                                    Rectangle { implicitWidth: 22; implicitHeight: 22; radius: 6; color: alertSettings.st.alert_critical_color || "#FF2020" }
+                                    RoundedTextField {
+                                        Layout.fillWidth: true
+                                        text: alertSettings.st.alert_critical_color || "#FF2020"
+                                        maximumLength: 7
+                                        Accessible.name: "Critical alert HEX color"
+                                        onEditingFinished: {
+                                            var value = Colors.normalizeHex(text)
+                                            if (value) { root.inputError = ""; root.backend.update({alert_critical_color: value}) }
+                                            else root.inputError = "Enter a six-digit critical color, such as #FF2020."
+                                        }
+                                    }
+                                }
                             }
                             Switch {
                                 text: "Light the active workspace key"
@@ -459,7 +514,7 @@ Ui.Panel {
                             Label {
                                 Layout.fillWidth: true
                                 wrapMode: Text.Wrap; font.pixelSize: 10; opacity: 0.65
-                                text: "Events use the second color; critical notifications flash red and still show during Do Not Disturb. Keyboards with named keys light the number key for workspaces 1 to 10. Devices on an onboard mode switch to per-key control while an event shows."
+                                text: "Critical notifications use the critical color and still show during Do Not Disturb. The workspace key uses the second color. Keyboards with named keys light the number key for workspaces 1 to 10. Devices on an onboard mode switch to per-key control while an event shows."
                             }
                             Label { text: "SAVED SCENES"; font.pixelSize: 11; font.letterSpacing: 2; opacity: 0.65 }
                             RowLayout {

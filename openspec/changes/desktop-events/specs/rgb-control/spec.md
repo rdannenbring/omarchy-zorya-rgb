@@ -5,11 +5,11 @@ The plugin SHALL optionally reflect desktop notifications and the active workspa
 
 #### Scenario: New notification
 - **WHEN** notification flash is enabled and a new notification arrives while Do Not Disturb is off
-- **THEN** selected devices flash the second color briefly and return to their lighting.
+- **THEN** selected devices show the configured alert effect in the alert color for the configured duration and return to their lighting.
 
 #### Scenario: Critical notification during Do Not Disturb
 - **WHEN** a critical notification arrives while Do Not Disturb is on
-- **THEN** selected devices flash red.
+- **THEN** selected devices show the alert in the critical color.
 
 #### Scenario: Workspace change
 - **WHEN** workspace highlighting is enabled and the active workspace changes to 1 through 10

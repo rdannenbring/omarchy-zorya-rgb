@@ -11,7 +11,8 @@ import threading
 import uuid
 
 DEFAULT_STATE = {'on': True, 'color': '#FFFFFF', 'brightness': 100, 'effect': 'static',
-                 'speed': 1.0, 'secondary_color': '#0088FF', 'theme_sync': False, 'hardware_modes': {}, 'notify_flash': False, 'flash_count': 2, 'flash_speed': 0.25, 'workspace_keys': False, 'devices': [], 'presets': []}
+                 'speed': 1.0, 'secondary_color': '#0088FF', 'theme_sync': False, 'hardware_modes': {}, 'notify_flash': False, 'alert_effect': 'flash', 'alert_duration': 2.0, 'alert_speed': 0.25,
+                 'alert_color': 'auto', 'alert_critical_color': '#FF2020', 'workspace_keys': False, 'devices': [], 'presets': []}
 SETTINGS = frozenset(DEFAULT_STATE) - {'presets'}
 
 
@@ -36,14 +37,20 @@ def validate_patch(state, patch):
         elif key == 'brightness':
             if type(value) is not int or not 0 <= value <= 100:
                 raise ValueError('brightness must be an integer from 0 to 100')
-        elif key == 'flash_count':
-            if type(value) is not int or not 1 <= value <= 6:
-                raise ValueError('flash_count must be an integer from 1 to 6')
-        elif key == 'flash_speed':
-            # Seconds per flash pulse.
-            if type(value) not in (int,float) or not math.isfinite(value) or not .1 <= value <= 1:
-                raise ValueError('flash_speed must be from 0.1 to 1 seconds per flash')
+        elif key == 'alert_effect':
+            if value not in ('flash','strobe','solid'):
+                raise ValueError('alert_effect must be flash, strobe or solid')
+        elif key in ('alert_duration','alert_speed'):
+            # Duration is the whole alert; speed is seconds per flash or strobe cycle.
+            low,high=(.5,10) if key=='alert_duration' else (.1,1)
+            if type(value) not in (int,float) or not math.isfinite(value) or not low <= value <= high:
+                raise ValueError(f'{key} must be from {low:g} to {high:g} seconds')
             value = float(value)
+        elif key in ('alert_color','alert_critical_color'):
+            # 'auto' follows the scene's second color (theme secondary while syncing).
+            if not isinstance(value,str) or not (value=='auto' and key=='alert_color' or re.fullmatch(r'#[0-9a-fA-F]{6}',value)):
+                raise ValueError(key+' must be #RRGGBB'+(' or auto' if key=='alert_color' else ''))
+            value = value if value=='auto' else value.upper()
         elif key == 'speed':
             if type(value) not in (int,float) or not math.isfinite(value) or not .1 <= value <= 5:
                 raise ValueError('speed must be a finite number from 0.1 to 5')
